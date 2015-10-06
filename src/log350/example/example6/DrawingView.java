@@ -13,6 +13,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 
 
 
@@ -80,7 +81,12 @@ class MyCursor {
 		return positions.get( positions.size()-2 );
 	}
 
-
+	public int getDistanceTravelled() {
+		int distanceX = Math.abs((int) (this.getCurrentPosition().x() - this.getFirstPosition().x()));
+		int distanceY = Math.abs((int) (this.getCurrentPosition().y() - this.getFirstPosition().y()));
+		return (int) Math.sqrt((distanceX * distanceX) + (distanceY * distanceY));
+	}
+	
 	public int getType() { return type; }
 	public void setType( int type ) { this.type = type; }
 }
@@ -178,17 +184,22 @@ public class DrawingView extends View {
 	static final int MODE_CAMERA_MANIPULATION = 1; // the user is panning/zooming the camera
 	static final int MODE_SHAPE_MANIPULATION = 2; // the user is translating/rotating/scaling a shape
 	static final int MODE_LASSO = 3; // the user is drawing a lasso to select shapes
+	static final int MODE_EFFACER = 4; // the user is removing a shape
+	private int touchSlop; //Différence en pixel pour différencier un drag d'un tap
 	int currentMode = MODE_NEUTRAL;
 
 	// This is only used when currentMode==MODE_SHAPE_MANIPULATION, otherwise it is equal to -1
 	int indexOfShapeBeingManipulated = -1;
 
 	MyButton lassoButton = new MyButton( "Lasso", 10, 70, 140, 140 );
-	
+	MyButton effacerButton = new MyButton("Effacer",10,220,140,140);
+			
 	OnTouchListener touchListener;
 	
 	public DrawingView(Context context) {
 		super(context);
+		
+		touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
 		
 		setFocusable(true);
 		setFocusableInTouchMode(true);
@@ -224,7 +235,6 @@ public class DrawingView extends View {
 	@Override
 	protected void onDraw(Canvas canvas) {
 		// The view is constantly redrawn by this method
-
 		gw.set( paint, canvas );
 		gw.clear( 0.0f, 0.0f, 0.0f );
 
@@ -255,7 +265,8 @@ public class DrawingView extends View {
 		gw.setCoordinateSystemToPixels();
 
 		lassoButton.draw( gw, currentMode == MODE_LASSO );
-
+		effacerButton.draw(gw, currentMode == MODE_EFFACER);
+		
 		if ( currentMode == MODE_LASSO ) {
 			MyCursor lassoCursor = cursorContainer.getCursorByType( MyCursor.TYPE_DRAGGING, 0 );
 			if ( lassoCursor != null ) {
@@ -350,6 +361,10 @@ public class DrawingView extends View {
 								currentMode = MODE_LASSO;
 								cursor.setType( MyCursor.TYPE_BUTTON );
 							}
+							else if ( effacerButton.contains(p_pixels) ) {
+								currentMode = MODE_EFFACER;
+								cursor.setType( MyCursor.TYPE_BUTTON);
+							}
 							else if ( indexOfShapeBeingManipulated >= 0 ) {
 								currentMode = MODE_SHAPE_MANIPULATION;
 								cursor.setType( MyCursor.TYPE_DRAGGING );
@@ -434,8 +449,40 @@ public class DrawingView extends View {
 							}
 						}
 						break;
+					
+					case MODE_EFFACER :
+						if ( type == MotionEvent.ACTION_DOWN ) {
+							if ( cursorContainer.getNumCursorsOfGivenType(MyCursor.TYPE_DRAGGING) == 1 )
+								//Il y a déjà un doigt qui bouge
+								cursor.setType(MyCursor.TYPE_IGNORE);
+							else
+								cursor.setType(MyCursor.TYPE_DRAGGING);
+						}
+						else if ( type == MotionEvent.ACTION_MOVE ) {
+							//On laisse le mouvement se terminer
+						}
+						else if ( type == MotionEvent.ACTION_UP ) {
+							if ( cursor.getType() == MyCursor.TYPE_DRAGGING ) {
+								//Si l'usager voulait seulement faire un tap et non un drag
+								if (cursor.getDistanceTravelled() < touchSlop) {
+									Point2D p_pixels = new Point2D(x,y);
+									Point2D p_world = gw.convertPixelsToWorldSpaceUnits( p_pixels );
+									int indexOfShapeToDelete = shapeContainer.indexOfShapeContainingGivenPoint( p_world );
+									if (indexOfShapeToDelete >= 0) {
+										shapeContainer.removeShape(indexOfShapeToDelete);	
+									}
+								}
+							}
+							cursorContainer.removeCursorByIndex( cursorIndex );
+							if ( cursorContainer.getNumCursors() == 0 ) {
+								currentMode = MODE_NEUTRAL;
+							}
+						}
+						break;
 					}
 					
+					
+						
 					v.invalidate();
 					
 					return true;

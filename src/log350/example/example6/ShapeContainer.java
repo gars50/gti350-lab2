@@ -12,6 +12,10 @@ class ShapeContainer {
 		Shape s = new Shape( points );
 		shapes.add( s );
 	}
+	
+	public void removeShape (int indexOfShapeToRemove) {
+		shapes.remove(indexOfShapeToRemove);
+	}
 
 	// returns -1 if no shape contains the given point
 	public int indexOfShapeContainingGivenPoint( Point2D p /* in world space */ ) {
